@@ -1,0 +1,8 @@
+
+src/data
+.env
+__pycache__
+draft
+.venv
+__init__.py
+src/frontend/frontend.py

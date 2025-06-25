@@ -7,6 +7,7 @@ import pandas as pd
 from pdf2image import convert_from_path
 import io
 from PyPDF2 import PdfReader
+import zipfile
 
 # Add parent directory to path to import the pipeline module
 # This is important for Modal deployment
@@ -42,6 +43,21 @@ if not api_key:
     st.error("❌ MISTRAL_API_KEY not found in environment variables!")
     st.info("Ensure the .env file contains MISTRAL_API_KEY=your_key_here")
     st.stop()
+
+
+def safe_file_operation(file_path, operation="read"):
+    """Safely perform file operations with error handling."""
+    try:
+        if operation == "read":
+            if os.path.exists(file_path):
+                with open(file_path, "rb") as f:
+                    return f.read()
+        elif operation == "exists":
+            return os.path.exists(file_path)
+        elif operation == "size":
+            return os.path.getsize(file_path) if os.path.exists(file_path) else 0
+    except Exception:
+        return None
 
 
 def get_image_as_base64(image_path_or_pil):
@@ -148,7 +164,7 @@ if uploaded_file is not None:
         with open(permanent_pdf_path, "wb") as f:
             f.write(uploaded_file.getvalue())
         file_size = len(uploaded_file.getvalue())
-        st.success(f"✅ File uploaded: {uploaded_file.name} ({file_size:,} bytes)")
+        st.success(f"File uploaded: {uploaded_file.name} ({file_size:,} bytes)")
     except Exception as e:
         st.error(f"Upload error: {e}")
         st.exception(e)
@@ -225,7 +241,32 @@ if permanent_pdf_path and os.path.exists(permanent_pdf_path):
         # Display results if processing is complete
         if "processed" in st.session_state and st.session_state.processed:
             st.markdown("---")
-            st.markdown("### 📊 Extraction Results")
+            st.markdown("### Extraction Results")
+
+            # Add download all button
+            if (
+                "extracted_paths" in st.session_state
+                and st.session_state.extracted_paths
+            ):
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    # Create ZIP file in memory
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+                        for pdf_path in st.session_state.extracted_paths:
+                            pdf_data = safe_file_operation(pdf_path, "read")
+                            if pdf_data:
+                                filename = os.path.basename(pdf_path)
+                                zipf.writestr(filename, pdf_data)
+
+                    zip_data = zip_buffer.getvalue()
+                    if zip_data:
+                        st.download_button(
+                            label="📦 Download All PDFs",
+                            data=zip_data,
+                            file_name="technical_sheets.zip",
+                            mime="application/zip",
+                        )
 
             if (
                 "boundaries" in st.session_state
@@ -251,33 +292,62 @@ if permanent_pdf_path and os.path.exists(permanent_pdf_path):
                             st.write(boundary.get("reason", "Not provided"))
 
                             # Download button for extracted PDF
-                            try:
-                                pages = boundary.get("pages", [])
-                                if isinstance(pages, str):
-                                    try:
-                                        pages = json.loads(pages.replace("'", '"'))
-                                    except Exception as e:
-                                        pages = [
-                                            int(p.strip())
-                                            for p in pages.strip("[]").split(",")
-                                            if p.strip()
+                            pages = boundary.get("pages", [])
+                            if isinstance(pages, str):
+                                try:
+                                    pages = json.loads(pages.replace("'", '"'))
+                                except Exception:
+                                    pages = [
+                                        int(p.strip())
+                                        for p in pages.strip("[]").split(",")
+                                        if p.strip()
+                                    ]
+
+                            # Find corresponding PDF file
+                            if (
+                                "extracted_paths" in st.session_state
+                                and st.session_state.extracted_paths
+                            ):
+                                matching_pdf = None
+                                first_page = pages[0] if pages else i + 1
+
+                                for pdf_path in st.session_state.extracted_paths:
+                                    if f"sheet_{first_page}_" in os.path.basename(
+                                        pdf_path
+                                    ):
+                                        matching_pdf = pdf_path
+                                        break
+
+                                if matching_pdf and safe_file_operation(
+                                    matching_pdf, "exists"
+                                ):
+                                    pdf_data = safe_file_operation(matching_pdf, "read")
+                                    if pdf_data:
+                                        # Clean product name for filename
+                                        product_name = boundary.get(
+                                            "product", f"sheet_{i}"
+                                        )
+                                        safe_name = "".join(
+                                            c if c.isalnum() or c in " -_" else "_"
+                                            for c in product_name
+                                        )
+                                        safe_name = safe_name.strip().replace(" ", "_")[
+                                            :50
                                         ]
-                                        print(f"Error parsing pages: {e}")
 
-                                # Find corresponding PDF file
-                                pdf_filename = f"sheet_{pages[0] if pages else i}.pdf"
-                                pdf_path = os.path.join(OUTPUT_STREAMLIT_DIR, pdf_filename)
-
-                                if os.path.exists(pdf_path):
-                                    with open(pdf_path, "rb") as pdf_file:
                                         st.download_button(
                                             label="📥 Download PDF",
-                                            data=pdf_file.read(),
-                                            file_name=f"{boundary.get('product', 'sheet')}_{i}.pdf",
+                                            data=pdf_data,
+                                            file_name=f"{safe_name}.pdf",
                                             mime="application/pdf",
+                                            key=f"download_{i}",
                                         )
-                            except Exception as e:
-                                st.error(f"Error accessing PDF file: {str(e)}")
+                                    else:
+                                        st.warning("Could not read PDF file")
+                                else:
+                                    st.warning("PDF file not found")
+                            else:
+                                st.warning("No extracted PDFs available")
 
                         with col2:
                             pages = boundary.get("pages", [])

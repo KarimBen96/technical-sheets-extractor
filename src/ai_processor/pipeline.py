@@ -54,8 +54,9 @@ class Pipeline:
         self.confidence_threshold = confidence_threshold
 
         # Set up output directory
-        self.output_dir = output_dir or "results"
-        os.makedirs(self.output_dir, exist_ok=True)
+        self.output_dir = OUTPUT_DIR if output_dir is None else output_dir
+        # Create the directory if it doesn't exist
+        Path(self.output_dir).mkdir(parents=True, exist_ok=True)
 
         # Initialize OCR analyzer with your prompt
         self.ocr_analyzer = OCRAnalyzer(

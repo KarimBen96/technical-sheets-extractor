@@ -8,6 +8,7 @@ from pdf2image import convert_from_path
 import io
 from PyPDF2 import PdfReader
 import zipfile
+import unicodedata
 
 # Add parent directory to path to import the pipeline module
 # This is important for Modal deployment
@@ -143,6 +144,31 @@ def visualize_technical_sheets(tech_sheets, total_pages):
     st.dataframe(summary_df[["Product", "Pages"]], use_container_width=True)
 
 
+def sanitize_filename_for_download(filename):
+    """Sanitize filename for safe download, handling Unicode characters."""
+    if not filename:
+        return "technical_sheet"
+    
+    # Handle surrogate escape sequences first
+    try:
+        # Try to encode with surrogateescape and decode back
+        filename = filename.encode('utf-8', 'surrogateescape').decode('utf-8', 'replace')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+    
+    # Normalize Unicode characters to decomposed form
+    filename = unicodedata.normalize('NFD', filename)
+    # Filter out combining characters (accents)
+    filename = ''.join(c for c in filename if unicodedata.category(c) != 'Mn')
+    # Keep only safe ASCII characters
+    safe_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_. ')
+    filename = ''.join(c if c in safe_chars else '_' for c in filename)
+    # Clean up multiple underscores and spaces
+    filename = '_'.join(filename.split())
+    # Limit length and ensure not empty
+    filename = filename[:50].strip('_')
+    return filename if filename else "technical_sheet"
+
 # # File upload section
 # st.markdown("### PDF Document Upload")
 
@@ -252,11 +278,20 @@ if permanent_pdf_path and os.path.exists(permanent_pdf_path):
                 with col1:
                     # Create ZIP file in memory
                     zip_buffer = io.BytesIO()
+                    used_names = set()
+                    
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
-                        for pdf_path in st.session_state.extracted_paths:
+                        for i, pdf_path in enumerate(st.session_state.extracted_paths):
                             pdf_data = safe_file_operation(pdf_path, "read")
                             if pdf_data:
                                 filename = os.path.basename(pdf_path)
+                                
+                                # Handle duplicates by adding index
+                                if filename in used_names:
+                                    name, ext = os.path.splitext(filename)
+                                    filename = f"{name}_{i}{ext}"
+                                
+                                used_names.add(filename)
                                 zipf.writestr(filename, pdf_data)
 
                     zip_data = zip_buffer.getvalue()
@@ -334,6 +369,10 @@ if permanent_pdf_path and os.path.exists(permanent_pdf_path):
                                         safe_name = safe_name.strip().replace(" ", "_")[
                                             :50
                                         ]
+
+                                        # Ensure safe filename for download
+                                        product_name = boundary.get("product", f"sheet_{i}")
+                                        safe_name = sanitize_filename_for_download(product_name)
 
                                         st.download_button(
                                             label="📥 Download PDF",

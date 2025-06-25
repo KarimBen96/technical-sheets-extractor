@@ -11,7 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from utils.config import Config
 from ai_processor.ocr_analyzer import OCRAnalyzer
 from ai_processor.prompt_list import prompt_technical_sheets
-from ai_processor.document_processor import main
+from ai_processor.document_processor import main as document_processor_main
 
 
 CATALOG_DIR = Config.CATALOG_DIR
@@ -190,7 +190,7 @@ class Pipeline:
         # Process with LLM
 
         # document_analysis = self.get_document_analysis(pdf_path)
-        enhanced_pdf_path, analysis_path, document_analysis, tech_sheet_pages = main(pdf_path)
+        enhanced_pdf_path, analysis_path, document_analysis, tech_sheet_pages = document_processor_main(pdf_path)
 
         response = self.ocr_analyzer.process_file(enhanced_pdf_path, document_analysis)
 
@@ -378,7 +378,7 @@ if __name__ == "__main__":
         "Catalogue-Tertu-Equipements-1-10_pagenumber.pdf", 
         "Catalogue-general-Nos-Solutions-VRD-Genie-Civil-1-20.pdf"]
 
-    pdf_filename_test = os.path.join(CATALOG_DIR, catalog_files[1])
+    pdf_filename_test = os.path.join(CATALOG_DIR, catalog_files[0])
 
     # Initialize pipeline
     pipeline = Pipeline()

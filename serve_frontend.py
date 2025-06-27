@@ -29,7 +29,7 @@ image = (
 )
 
 
-app = modal.App(name="technical-sheets-extractor-v1.1", image=image)
+app = modal.App(name="technical-sheets-extractor", image=image)
 
 
 @app.function(image=image)
@@ -77,7 +77,7 @@ def debug_upload():
 @app.function(image=image)
 @modal.concurrent(max_inputs=100)  # Very important line
 @modal.web_server(8000)
-def run_streamlit():
+def run():
     # Setup environment
     sys.path.insert(0, "/root")
     os.environ["CATALOG_DIR"] = "/root/data/catalogs"      

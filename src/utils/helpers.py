@@ -25,14 +25,3 @@ def check_mistral_api(api_key: Optional[str] = None) -> bool:
         return True
     except:
         return False
-
-
-
-if __name__ == "__main__":
-    mistral_api_key = "IwkFyXMZh3thViQIWVgwtpaG3JXjzhlj"
-
-    check_result = check_mistral_api(mistral_api_key)
-    if check_result:
-        print("Mistral API key is working.")
-    else:
-        print("Mistral API key is not working.")
